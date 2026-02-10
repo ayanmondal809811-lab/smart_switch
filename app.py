@@ -1,52 +1,60 @@
-from flask import Flask, render_template_string
-from flask_socketio import SocketIO, emit
+from flask import Flask, render_template_string, jsonify
 import os
 
 app = Flask(__name__)
-# Ping timeout ebong interval barano hoyeche jate connection drop na hoy
-socketio = SocketIO(app, 
-    cors_allowed_origins="*", 
-    async_mode='eventlet',
-    ping_timeout=60,
-    ping_interval=25)
+# Cloud-e command store korar jonno variable
+last_command = "none"
 
 HTML_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Switch</title>
+    <title>Cloud Remote</title>
     <style>
-        body { background: #000; color: #fff; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        .btn { width: 120px; height: 120px; border-radius: 50%; border: none; font-size: 20px; font-weight: bold; cursor: pointer; margin: 20px; }
-        .on { background: #2ecc71; } .off { background: #e74c3c; }
+        body { background: #121212; color: white; font-family: sans-serif; text-align: center; padding-top: 50px; }
+        .btn { width: 120px; height: 120px; border-radius: 50%; border: none; font-size: 20px; font-weight: bold; cursor: pointer; margin: 10px; transition: 0.3s; }
+        .on { background: #2ecc71; box-shadow: 0 0 20px #2ecc7155; }
+        .off { background: #e74c3c; box-shadow: 0 0 20px #e74c3c55; }
+        .btn:active { transform: scale(0.9); }
     </style>
 </head>
 <body>
-    <h1>SMART SWITCH</h1>
-    <button class="btn on" onclick="s('0')">ON</button>
-    <button class="btn off" onclick="s('1')">OFF</button>
+    <h1>CLOUD CONTROL</h1>
+    <button class="btn on" onclick="send('0')">ON</button>
+    <button class="btn off" onclick="send('1')">OFF</button>
+    <p id="stat">Ready</p>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <script>
-        const socket = io();
-        function s(c) { socket.emit('web_msg', c); }
-        socket.on('connect', () => console.log('Connected to Server'));
+        function send(cmd) {
+            fetch('/send/' + cmd).then(() => {
+                document.getElementById('stat').innerText = "Sent: " + (cmd=='0'?'ON':'OFF');
+            });
+        }
     </script>
 </body>
 </html>
 """
 
 @app.route('/')
-def index():
+def home():
     return render_template_string(HTML_PAGE)
 
-@socketio.on('web_msg')
-def handle_msg(data):
-    print(f"Server received: {data}")
-    # 'broadcast=True' dilei sudhu bridge.py pabe
-    emit('to_bridge', data, broadcast=True)
+# Phone theke command pathano
+@app.route('/send/<cmd>')
+def send_command(cmd):
+    global last_command
+    last_command = cmd
+    return f"Command {cmd} queued"
+
+# Bridge theke command check kora
+@app.route('/get')
+def get_command():
+    global last_command
+    temp = last_command
+    last_command = "none" # Command read hoye gele khali kore deya
+    return jsonify({"cmd": temp})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port)
