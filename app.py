@@ -3,11 +3,11 @@ import os
 
 app = Flask(__name__)
 
-# কমান্ড কিউ (যাতে কমান্ড হারিয়ে না যায়)
+# কমান্ড কিউ
 command_queue = []
 
-# ডিভাইসের ডিফল্ট নাম এবং স্ট্যাটাস মেমোরিতে রাখা
-devices = {str(i): {"name": f"Device {i}", "state": 0} for i in range(2, 14)}
+# ১২টি ডিভাইসের মেমোরি (পিন ২ থেকে ১৩)
+devices = {str(i): {"name": f"Switch {i-1}", "state": 0} for i in range(2, 14)}
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -15,40 +15,198 @@ HTML_PAGE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Home Hub</title>
+    <title>SkySwitch | OS v1.0</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; --success: #22c55e; }
-        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
-        h1 { text-align: center; font-weight: 300; letter-spacing: 2px; margin-bottom: 30px; }
-        
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; max-width: 800px; margin: 0 auto; }
-        
-        .card { background: var(--card); border-radius: 15px; padding: 20px; text-align: center; transition: 0.3s; position: relative; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .card:hover { transform: translateY(-5px); }
-        
-        .icon-box { font-size: 30px; margin-bottom: 10px; color: #64748b; transition: 0.3s; }
-        .active .icon-box { color: var(--success); text-shadow: 0 0 15px rgba(34, 197, 94, 0.5); }
-        
-        input.dev-name { background: transparent; border: none; color: var(--text); text-align: center; font-size: 16px; width: 100%; margin-bottom: 10px; padding: 5px; border-bottom: 1px solid transparent; }
-        input.dev-name:focus { border-bottom: 1px solid var(--accent); outline: none; }
-        
-        .toggle-btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; background: #334155; color: #94a3b8; transition: 0.3s; }
-        .active .toggle-btn { background: var(--success); color: white; }
+        :root {
+            --neon-blue: #00d2ff;
+            --neon-green: #39ff14;
+            --neon-pink: #f400ff;
+            --bg-dark: #020617;
+            --glass: rgba(15, 23, 42, 0.8);
+            --border: rgba(0, 210, 255, 0.3);
+        }
 
-        /* Save Button for Names */
-        .save-hint { font-size: 10px; color: var(--accent); opacity: 0; transition: 0.3s; }
-        .editing .save-hint { opacity: 1; }
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            background: var(--bg-dark);
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+        }
+
+        /* --- ফিউচারিস্টিক ব্যাকগ্রাউন্ড --- */
+        .bg-vibe {
+            position: fixed; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 50%, #1e293b 0%, #020617 100%);
+            z-index: -1;
+        }
+
+        /* --- Intro Layer --- */
+        #intro-layer {
+            position: fixed; inset: 0; background: black;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 9999; transition: all 1.2s cubic-bezier(0.8, 0, 0.2, 1);
+        }
+
+        .power-btn {
+            position: relative; width: 120px; height: 120px;
+            border-radius: 50%; border: 4px solid var(--neon-blue);
+            background: transparent; color: var(--neon-blue);
+            font-size: 50px; cursor: pointer;
+            box-shadow: 0 0 30px var(--neon-blue), inset 0 0 15px var(--neon-blue);
+            transition: 0.4s; z-index: 2;
+        }
+
+        .power-btn:hover {
+            box-shadow: 0 0 60px var(--neon-blue), inset 0 0 30px var(--neon-blue);
+            transform: scale(1.1);
+        }
+
+        .sky-text {
+            margin-top: 30px; font-family: 'Orbitron'; font-size: 2.5rem;
+            letter-spacing: 15px; text-transform: uppercase;
+            color: var(--neon-blue); text-shadow: 0 0 20px var(--neon-blue);
+            opacity: 0; transform: translateY(30px); transition: 1s ease-out;
+        }
+
+        /* --- Main Hub UI --- */
+        #main-hub {
+            opacity: 0; transform: scale(0.9); transition: 1.5s ease-out;
+            padding: 20px; height: 100vh; overflow-y: auto;
+        }
+
+        header {
+            text-align: center; padding: 20px 0 40px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            font-family: 'Orbitron'; font-size: 2rem; margin: 0;
+            background: linear-gradient(to right, #fff, var(--neon-blue));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            letter-spacing: 8px;
+        }
+
+        .grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 25px; max-width: 1200px; margin: 0 auto;
+        }
+
+        .card {
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 15px; padding: 25px;
+            position: relative; overflow: hidden;
+            backdrop-filter: blur(15px);
+            transition: 0.4s;
+        }
+
+        .card:hover {
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 25px rgba(0, 210, 255, 0.2);
+            transform: translateY(-5px);
+        }
+
+        .icon-box {
+            font-size: 40px; margin-bottom: 15px; color: #1e293b;
+            transition: 0.4s;
+        }
+
+        .active .icon-box {
+            color: var(--neon-green);
+            text-shadow: 0 0 20px var(--neon-green);
+        }
+
+        .dev-name {
+            background: transparent; border: none; color: white;
+            font-family: 'Orbitron'; font-size: 1rem; text-align: center;
+            width: 100%; margin-bottom: 20px; border-bottom: 1px solid transparent;
+        }
+
+        .dev-name:focus { outline: none; border-bottom: 1px solid var(--neon-blue); }
+
+        .toggle-btn {
+            width: 100%; padding: 12px; border: 1px solid var(--border);
+            background: rgba(255,255,255,0.05); color: #64748b;
+            font-weight: bold; cursor: pointer; border-radius: 5px;
+            font-family: 'Orbitron'; font-size: 0.8rem; transition: 0.3s;
+        }
+
+        .active .toggle-btn {
+            background: var(--neon-green); color: black;
+            box-shadow: 0 0 15px var(--neon-green); border: none;
+        }
+
+        /* স্ক্যানিং লাইন এনিমেশন */
+        .scan-line {
+            position: absolute; width: 100%; height: 2px;
+            background: rgba(0, 210, 255, 0.5); top: 0; left: 0;
+            animation: scan 3s linear infinite; opacity: 0.2;
+        }
+
+        @keyframes scan {
+            0% { top: 0; } 100% { top: 100%; }
+        }
+
+        /* সাউন্ড বাটন ইফেক্ট */
+        .toggle-btn:active { transform: scale(0.95); }
+
     </style>
 </head>
 <body>
-    <h1><i class="fas fa-network-wired"></i> SMART HUB</h1>
-    
-    <div class="grid" id="deviceGrid">
-        </div>
+
+    <div class="bg-vibe"></div>
+
+    <div id="intro-layer">
+        <button class="power-btn" onclick="initSystem()">
+            <i class="fas fa-power-off"></i>
+        </button>
+        <div class="sky-text" id="skyText">SkySwitch</div>
+    </div>
+
+    <div id="main-hub">
+        <header>
+            <h1><i class="fas fa-microchip"></i> SKYSWITCH HUB</h1>
+            <p style="color: var(--neon-blue); letter-spacing: 2px; font-size: 12px;">SYSTEM STATUS: <span id="online-status">SCANNING...</span></p>
+        </header>
+
+        <div class="grid" id="deviceGrid"></div>
+    </div>
+
+    <audio id="audioStartup" src="/static/startup.mp3"></audio>
+    <audio id="audioClick" src="/static/click.mp3"></audio>
 
     <script>
-        // সার্ভার থেকে ডিভাইসের লিস্ট আনা
+        const audioStartup = document.getElementById('audioStartup');
+        const audioClick = document.getElementById('audioClick');
+
+        function initSystem() {
+            // সাউন্ড প্লে
+            audioStartup.play().catch(e => console.log("Audio play failed"));
+            
+            // এনিমেশন শুরু
+            const text = document.getElementById('skyText');
+            text.style.opacity = "1";
+            text.style.transform = "translateY(0)";
+            
+            setTimeout(() => {
+                const intro = document.getElementById('intro-layer');
+                const hub = document.getElementById('main-hub');
+                
+                intro.style.transform = "translateY(-100%)";
+                hub.style.opacity = "1";
+                hub.style.transform = "scale(1)";
+                
+                document.getElementById('online-status').innerText = "ENCRYPTED & ONLINE";
+            }, 3000);
+
+            loadDevices();
+        }
+
         async function loadDevices() {
             const res = await fetch('/status');
             const devices = await res.json();
@@ -58,54 +216,53 @@ HTML_PAGE = """
             for (const [pin, info] of Object.entries(devices)) {
                 const isActive = info.state == 1;
                 grid.innerHTML += `
-                    <div class="card ${isActive ? 'active' : ''}" id="card-${pin}">
-                        <div class="icon-box"><i class="fas fa-lightbulb"></i></div>
-                        <input type="text" class="dev-name" value="${info.name}" onchange="rename('${pin}', this.value)" onfocus="this.parentElement.classList.add('editing')" onblur="this.parentElement.classList.remove('editing')">
-                        <div class="save-hint">Auto Saving...</div>
+                    <div class="card ${isActive ? 'active' : ''}">
+                        <div class="scan-line"></div>
+                        <div class="icon-box">
+                            <i class="fas ${isActive ? 'fa-lightbulb' : 'fa-regular fa-lightbulb'}"></i>
+                        </div>
+                        <input type="text" class="dev-name" value="${info.name}" onchange="rename('${pin}', this.value)">
                         <button class="toggle-btn" onclick="toggle('${pin}', ${isActive ? 0 : 1})">
-                            ${isActive ? 'ON' : 'OFF'}
+                            ${isActive ? 'SYSTEM ACTIVE' : 'ENGAGE'}
                         </button>
                     </div>
                 `;
             }
         }
 
-        // কমান্ড পাঠানো
         function toggle(pin, state) {
+            audioClick.currentTime = 0;
+            audioClick.play();
             fetch(`/send/${pin}/${state}`).then(() => loadDevices());
         }
 
-        // নাম পরিবর্তন করা
         function rename(pin, newName) {
             fetch(`/rename/${pin}/${newName}`);
         }
 
-        // পেজ লোড হলে এবং প্রতি ৩ সেকেন্ডে আপডেট
-        loadDevices();
-        setInterval(loadDevices, 3000); 
+        // অটো আপডেট (৫ সেকেন্ড পর পর)
+        setInterval(loadDevices, 5000);
     </script>
 </body>
 </html>
 """
 
+# --- Flask Routes (অপরিবর্তিত) ---
+
 @app.route('/')
 def home():
     return render_template_string(HTML_PAGE)
 
-# কমান্ড পাঠানোর রুট
 @app.route('/send/<pin>/<state>')
 def send_command(pin, state):
     global command_queue, devices
-    
     if pin in devices:
-        devices[pin]['state'] = int(state) # সার্ভারে স্টেট আপডেট
-        # আর্ডুইনোর জন্য ফরম্যাট: "pin:state"
+        devices[pin]['state'] = int(state)
         cmd_str = f"{pin}:{state}"
         command_queue.append(cmd_str)
         return jsonify({"status": "queued", "cmd": cmd_str})
     return jsonify({"error": "Invalid Pin"}), 400
 
-# নাম রিনেম করার রুট
 @app.route('/rename/<pin>/<name>')
 def rename_device(pin, name):
     if pin in devices:
@@ -113,21 +270,16 @@ def rename_device(pin, name):
         return jsonify({"status": "renamed", "name": name})
     return jsonify({"error": "Invalid Pin"}), 400
 
-# অ্যাপের বর্তমান অবস্থা জানার রুট (ফ্রন্টএন্ডের জন্য)
 @app.route('/status')
 def get_status():
     return jsonify(devices)
 
-# ব্রিজ (পাইথন) এই রুটে হিট করে কমান্ড নিয়ে যাবে
 @app.route('/get')
 def get_command():
     global command_queue
     if command_queue:
-        # লিস্ট থেকে প্রথম কমান্ড বের করে আনা (FIFO)
-        cmd = command_queue.pop(0)
-        return jsonify({"cmd": cmd})
-    else:
-        return jsonify({"cmd": "none"})
+        return jsonify({"cmd": command_queue.pop(0)})
+    return jsonify({"cmd": "none"})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
